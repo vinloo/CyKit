@@ -75,9 +75,6 @@ if arg_count == 1 or arg_count > 5 or sys.argv[1] == "help" or sys.argv[1] == "-
     mirror("  'pywinusb'            Specifies to use the pywinusb libraries to connect to the USB device.\r\n\r\n")
     mirror("                         Defaults to using libusb libraries.\r\n\r\n")
     mirror("  'noweb'               Displays data. (without requiring a TCP connection.)\r\n\r\n")
-    mirror("  'bluetooth'  Attempt to AUTO-DETECT an already paired bluetooth device.\r\n\r\n")
-    mirror("  'bluetooth=xxxxxxxx'  Connect to an already paired bluetooth device, use the hex digit found in the devices pairing name.\r\n\r\n")
-    mirror("                         The pairing name can easily be found in Windows Bluetooth settings.\r\n\r\n")
     mirror("   Join these options (in any order), using a + separator. \r\n")
     mirror("   (e.g  info+confirm ) \r\n\r\n")
     mirror(" " + "═" * 100 + "\r\n")
@@ -156,8 +153,6 @@ def main(CyINIT):
         time.sleep(.001)
         continue
 
-    if "bluetooth" in parameters:
-        mirror("> [Bluetooth] Pairing Device . . .")
     else:
         if "noweb" not in parameters:
             mirror("> Listening on " + HOST + " : " + str(PORT))
@@ -193,11 +188,7 @@ def main(CyINIT):
         if (CyINIT % 10) == 0:
 
             check_threads = 0
-
             t_array = str(list(map(lambda x: x.name, threading.enumerate())))
-            # if eval(cy_IO.getInfo("verbose")) == True:
-            #    mirror(" Active Threads :{ " + str(t_array) + " } ")
-            # time.sleep(15)
 
             if 'ioThread' in t_array:
                 check_threads += 1
@@ -213,8 +204,6 @@ def main(CyINIT):
                     main(1)
                 continue
 
-            #(1 if noweb == True else 2)
-
             if check_threads < (1 if noweb == True else 2):
 
                 threadMax = 2
@@ -226,13 +215,10 @@ def main(CyINIT):
                     for t in threading.enumerate():
                         if "eegThread" in t.name:
                             cy_IO.setInfo("status", "False")
-                            # mirror(t.name)
                         if "ioThread" in t.name:
-                            # mirror(t.name)
                             CyWebSocket.socketIO.stopThread(ioTHREAD)
 
                         if "Thread-" in t.name:
-                            # mirror(t.name)
                             threadMax += 1
                             try:
                                 t.abort()
@@ -240,7 +226,6 @@ def main(CyINIT):
                                 continue
                 t_array = str(
                     list(map(lambda x: x.name, threading.enumerate())))
-                # mirror(str(t_array))
                 ioTHREAD.onClose("CyKIT.main() 1")
                 mirror("*** Reseting . . .")
                 CyINIT = 1

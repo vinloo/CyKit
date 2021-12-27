@@ -13,31 +13,22 @@
 #  Contributions  by yikestone
 #  Ported to Linux by vinloo
 
-from cyCrypto.Util.Padding import pad
-from cyCrypto.Random import get_random_bytes
+import cyPyUSB.backend.libusb1
+import cyPyUSB.util
+import cyPyUSB.core
+import cyPyUSB
 from cyCrypto.Cipher import AES
 import time
 import os
 import sys
-import platform
-import socket
 import struct
 import operator
-import math
 import queue
 import threading
 import traceback
-import array
-import inspect
-import random
 import usb
 import usb.core
 from usb.backend import libusb1
-
-#  Import C functions for Bluetooth.
-# ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
-from ctypes import *
-from ctypes.wintypes import HANDLE, ULONG, DWORD, USHORT
 
 #  Detect 32 / 64 Bit Architecture.
 # ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
@@ -113,76 +104,18 @@ if parameters > 4 and "path" in eeg_config:
 
 #  Setup [ pyUSB (Default) / pywinusb ]
 # ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
-if parameters > 4 and "pywinusb" in eeg_config:
-    if verbose == True:
-        mirror.text("> Importing (pywinusb) \\cyPyWinUSB")
+if verbose == True:
+    mirror.text("> Importing (pyusb) \\cyPyUSB")
+eeg_driver = "pyusb"
+sys.path.insert(0, localPath + '\\cyUSB')
+sys.path.insert(0, localPath + '\\cyUSB\\libusb')
 
-    eeg_driver = "pywinusb"
-    sys.path.insert(0, localPath + '\\cyPyWinUSB')
-    import cyPyWinUSB as hid
-else:
-    if verbose == True:
-        mirror.text("> Importing (pyusb) \\cyPyUSB")
-    eeg_driver = "pyusb"
-    sys.path.insert(0, localPath + '\\cyUSB')
-    sys.path.insert(0, localPath + '\\cyUSB\\libusb')
-    import cyPyUSB
-    import cyPyUSB.core
-    import cyPyUSB.util
-    import cyPyUSB.backend.libusb1
-
-if parameters > 4 and "bluetooth" in eeg_config:
-
-    BT_manualkey = "AUTO-DETECT"
-
-    if "bluetooth=" in eeg_config:
-        split_bt = str(eeg_config).split("bluetooth=")
-
-        if len(split_bt) > 1:
-            if "+" in split_bt[1]:
-                BT_manualkey = str(split_bt[1]).split("+")[0]
-            else:
-                BT_manualkey = split_bt[1]
-
-            if len(BT_manualkey) > 8 or len(BT_manualkey) < 8:
-                mirror.text(
-                    "> Incorrect Key Length. Bluetooth key is 8 hex digits long. ")
-                mirror.text(
-                    "> (Locate in the EPOC+(xxxxxxxx) title, in Windows Bluetooth settings.)")
-                mirror.text("\r\n> Defaulting to auto-detect bluetooth. ")
-
-    mirror.text("\r\n> Trying Bluetooth Key >>> " + str(BT_manualkey))
-    sys.path.insert(0, localPath + '.\\cyDrivers')
-
-    try:
-        eegDLL = cdll.LoadLibrary(
-            localPath + "\\cyDrivers\EEGBtleLib" + str(arch) + ".dll")
-
-    except Exception as e:
-        mirror.text("> Bluetooth Library not loaded. ")
-        mirror.text(" Error " + str(e))
-        os._exit(0)
-
-    eeg_driver = "bluetooth"
 
 #  Import modified pycryptodomex AES ciphers.
 # ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
 tasks = queue.Queue()
 encrypted_data = bytearray()
-
-#  Bluetooth LE. Data Structure Function.
-# ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
-
-
-class BTH_LE_GATT_CHARACTERISTIC_VALUE(Structure):
-    global _CB_FUNC_
-    _fields_ = [
-        ("DataSize", c_ulong),
-        ("Data", c_ubyte * 20)]
-
-
-_CB_FUNC_ = CFUNCTYPE(None, BTH_LE_GATT_CHARACTERISTIC_VALUE)
 
 
 #  ControllerIO(). I/O threaded bridge to browser (for CyWebSocket.py and eeg.py)
@@ -655,8 +588,6 @@ def settings_menu(device, sIO, intf):
         mirror.text(
             "      The EPOC+ is connected directly to your computer via USB.                                                     ")
         mirror.text(
-            "      During this time, the device can not send data via Bluetooth or USB. \r\n\r\n                                 ")
-        mirror.text(
             "      To Change the EPOC+ mode, the device must be [Powered On] (ie. White light on)  while connected to USB.       ")
         mirror.text(
             "      If the device is not turned on when a selection is made, no settings will be changed.\r\n\r\n                 ")
@@ -784,7 +715,7 @@ def DataCallback(EventOutParameter):
     try:
         data_bin = EventOutParameter.Data
     except Exception as e:
-        mirror.text(" Bluetooth Error: " + str(e))
+        mirror.text("Error: " + str(e))
         return
 
     if data_bin == "":
@@ -1025,320 +956,73 @@ class EEG(object):
             if t.getName()[:6] == "Thread":
                 threadMax += 1
 
-        #  Bluetooth LE
-        # ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
-        if eeg_driver == "bluetooth":
+        b = libusb1.get_backend()
+        self.device = usb.core.find(idVendor=0x1234)  # Find device.
 
-            BT_manualkey = globals()['BT_manualkey']
+        if self.device is None:
+            sys.exit("No device found!")
 
-            uuid_list = [DATA_UUID]
-            uuid_clist = (c_wchar_p * len(uuid_list))()
-            uuid_clist[:] = uuid_list
+        if self.device.is_kernel_driver_active(0):
+            self.device.detach_kernel_driver(0)
+        elif self.device.is_kernel_driver_active(1):
+            self.device.detach_kernel_driver(1)
 
-            try:
-                global _CB_FUNC_
-                global cb
-                self.device = eegDLL.btle_init(DEVICE_UUID)  # Open.
-                cb = _CB_FUNC_(DataCallback)                    # Set Handler.
-                eegDLL.set_callback_func(cb)
-                # mirror.text("> Searching for Bluetooth Device . . .")
-                useDevice = ""
-                while useDevice != "Y":
-                    getBTname = eegDLL.get_bluetooth_id()
+        # headset_status = self.device.ctrl_transfer(
+        #    0xA1, 0x01, 0x0300, 0, 31)  # Interface 0
 
-                    time.sleep(1)
-                    BTid = str(c_wchar_p(getBTname).value)
+        company = str(self.device.iManufacturer)
+        product = str(self.device.iProduct)
+        vid = str(hex(self.device.idVendor))
+        pid = str(hex(self.device.idProduct))
 
-                    if "EPOC" in BTid or "Insight" in BTid:
-                        mirror.text(
-                            "\r\n> Found Bluetooth Device: [" + BTid + "] \r\n")
-                        if "confirm" in config:
-                            useDevice = input(
-                                " Use this device? [Y]es? ").upper()
-                        else:
-                            useDevice = "Y"
+        useDevice = ""
+        devicesUsed += 1
+        if threadMax < 2:
+            cfg = self.device.get_active_configuration()
 
-                        if useDevice == "Y":
-                            BTid = BTid.replace("(", "")
-                            BTid = BTid.replace(")", "")
-                            BT_key = BTid.split(" ")
-                            BTLE_device_name = BT_key[0]
-                            BT_key = BT_key[1]
-                            if BT_manualkey != "AUTO-DETECT" and BT_manualkey != BT_key:
-                                useDevice = ""
-                                continue
+            if product == 'EPOC+':
+                deviceList[1] = 'empty'
+                intf = cfg[(0, 0)]
+                self.cyIO.setInfo("intf", intf)
+            else:
+                intf = cfg[(1, 0)]
+                self.cyIO.setInfo("intf", intf)
 
-                            self.serial_number = bytes(("\x00" * 12), 'utf-8') + bytearray.fromhex(
-                                str(BT_key[6:8] + BT_key[4:6] + BT_key[2:4] + BT_key[0:2]))
-
-                BT_Run = eegDLL.run_data_collection(self.device, uuid_clist)
-
-                devicesUsed += 1
-
-                self.product_name = "EEG Signals"
-
-            except Exception as e:
-                mirror.text("> Error Initializing Bluetooth. ")
-                mirror.text(" Bluetooth Setup() Error:" + str(e))
-                return
-                os._exit(0)
-
-        #  PyWinUSB.
-        # ¯¯¯¯¯¯¯¯¯¯¯¯
-        if eeg_driver == "pywinusb" and self.device == None:
-            try:
-                for all_devices in hid.find_all_hid_devices():
-                    if "info" in config:
-
-                        mirror.text("Product name " + self.product_name)
-                        mirror.text("device path " + all_devices.device_path)
-                        mirror.text("instance id " + all_devices.instance_id)
-                        mirror.text("═" * 50 + "\r\n")
-                    useDevice = ""
-                    for i, findDevice in enumerate(deviceList):
-
-                        if all_devices.product_name == deviceList[i]:
-                            mirror.text(
-                                "\r\n> Found EEG Device: [" + findDevice + "] \r\n")
-                            if "confirm" in config:
-                                useDevice = input("Use this device? [Y]es? ")
-                            else:
-                                useDevice = "Y"
-                            if useDevice.upper() == "Y":
-                                devicesUsed += 1
-                                self.device = all_devices
-                                if threadMax < 2:
-                                    self.device.open()
-                                self.product_name = all_devices.product_name
-                                self.serial_number = all_devices.serial_number
-                                if threadMax < 2:
-                                    all_devices.set_raw_data_handler(
-                                        self.dataHandler)
-                                    detail_info = None
-                                    device_firmware = ""
-                                    while detail_info == None:
-                                        detail_report = self.device.find_input_reports()
-                                        detail_info = detail_report[0].get()
-                                        mirror.text(str(detail_info))
-                                        device_firmware = "0x" + \
-                                            str(hex(detail_info[3]))[
-                                                2:] + str(hex(detail_info[4])[2:])
-                                    if eval(self.cyIO.getInfo("verbose")) == True:
-                                        mirror.text(
-                                            " USB Dongle Firmware = " + device_firmware)
-
-                                mirror.text("> Using Device: " +
-                                            all_devices.product_name + "\r\n")
-                                mirror.text("  Serial Number >>> " +
-                                            all_devices.serial_number)
-                                if all_devices.product_name == "EPOC+":
-                                    # Direct USB Connection detected. Replace EEG Signals to avoid connecting.
-                                    deviceList[1] = "empty"
-                                    # self.cyIO.setReport("Device", all_devices.find_output_reports())
-
-            except Exception as msg:
-                mirror.text(" Device Error: " + str(msg))
-
-        #  PyUSB.
-        # ¯¯¯¯¯¯¯¯¯
-        if eeg_driver == "pyusb" and self.device == None:
-            b = libusb1.get_backend()
-            self.device = usb.core.find(idVendor=0x1234)  # Find device.
-
-            if self.device is None:
-                sys.exit("No device found!")
-
-            if self.device.is_kernel_driver_active(0):
-                self.device.detach_kernel_driver(0)
-            elif self.device.is_kernel_driver_active(1):
-                self.device.detach_kernel_driver(1)
-
-            # headset_status = self.device.ctrl_transfer(
-            #    0xA1, 0x01, 0x0300, 0, 31)  # Interface 0
-
-            company = str(self.device.iManufacturer)
-            product = str(self.device.iProduct)
-            vid = str(hex(self.device.idVendor))
-            pid = str(hex(self.device.idProduct))
-
-            useDevice = ""
-            devicesUsed += 1
-            if threadMax < 2:
-                # self.device.set_configuration()
-                cfg = self.device.get_active_configuration()
+            while detail_info == None:
 
                 if product == 'EPOC+':
-                    deviceList[1] = 'empty'
-                    intf = cfg[(0, 0)]
-                    self.cyIO.setInfo("intf", intf)
-
+                    detail_info = list(self.device.ctrl_transfer(
+                        0xA1, 0x01, 0x0100, 0, 32))
                 else:
+                    detail_info = list(self.device.ctrl_transfer(
+                        0xA1, 0x01, 0x0300, 1, 31))
 
-                    intf = cfg[(1, 0)]
-                    self.cyIO.setInfo("intf", intf)
+                if detail_info == None:
+                    continue
+                device_firmware = "0x" + \
+                    str(hex(detail_info[2]))[
+                        2:] + str(hex(detail_info[3])[2:])
+                software_firmware = "0x" + \
+                    str(hex(detail_info[4]))[
+                        2:] + str(hex(detail_info[5])[2:])
 
-                """
-                detail_info = None
-                intf = cfg[(0,0)]
-                while 1:
-                    detail_info = list(self.device.ctrl_transfer(0xA1, 0x01, 0x0100, 0, 32))
-                    mirror.text(str(detail_info))
-                    data = ""
-                    data = self.device.read(0x02, 32, 1000)
-                    if data != "":
-                        mirror.text(">>>" + str(list(data)))
-                    #time.sleep(.1)
-                """
+            if eval(self.cyIO.getInfo("verbose")) == True:
+                mirror.text(str(list(detail_info)))
+                mirror.text(
+                    " Device Firmware = " + device_firmware)
+                mirror.text(
+                    " Software Firmware = " + software_firmware)
 
-                while detail_info == None:
-
-                    if product == 'EPOC+':
-                        detail_info = list(self.device.ctrl_transfer(
-                            0xA1, 0x01, 0x0100, 0, 32))
-                    else:
-                        detail_info = list(self.device.ctrl_transfer(
-                            0xA1, 0x01, 0x0300, 1, 31))
-
-                    if detail_info == None:
-                        continue
-                    device_firmware = "0x" + \
-                        str(hex(detail_info[2]))[
-                            2:] + str(hex(detail_info[3])[2:])
-                    software_firmware = "0x" + \
-                        str(hex(detail_info[4]))[
-                            2:] + str(hex(detail_info[5])[2:])
-
-                if eval(self.cyIO.getInfo("verbose")) == True:
-                    mirror.text(str(list(detail_info)))
-                    mirror.text(
-                        " Device Firmware = " + device_firmware)
-                    mirror.text(
-                        " Software Firmware = " + software_firmware)
-
-                self.serial_number = str(cyPyUSB.util.get_string(
-                    self.device, self.device.iSerialNumber))
-                self.product_name = str(cyPyUSB.util.get_string(
-                    self.device, self.device.iProduct))
+            self.serial_number = str(cyPyUSB.util.get_string(
+                self.device, self.device.iSerialNumber))
+            self.product_name = str(cyPyUSB.util.get_string(
+                self.device, self.device.iProduct))
 
             if eval(self.cyIO.getInfo("verbose")) == True:
                 mirror.text("> Using Device: " +
                             self.product_name + "\r\n")
                 mirror.text(
                     " ░░ Serial Number: " + self.serial_number + " ░░\r\n")
-
-            # try:
-            #     # Alternative 'backend' devices for pyUSB, could be added here.
-            #     backend = cyPyUSB.backend.libusb1.get_backend(
-            #         find_library=lambda x: "./cyDrivers/libusb-1.0x" + str(arch) + ".dll")
-
-            #     if str(backend) == "None":
-            #         mirror.text(
-            #             "> Driver could not be found or unsuccessfully loaded.")
-            #         os._exit(0)
-            #     self.product_name = None
-            #     all_devices = cyPyUSB.core.find(find_all=1, backend=backend)
-            #     for select_device in all_devices:
-            #         if eval(self.cyIO.getInfo("verbose")) == True:
-            #             mirror.text("═" * 50)
-            #         try:
-            #             company = str(cyPyUSB.util.get_string(
-            #                 select_device, select_device.iManufacturer))
-            #             product = str(cyPyUSB.util.get_string(
-            #                 select_device, select_device.iProduct))
-
-            #             vid = str(hex(select_device.idVendor))
-            #             pid = str(hex(select_device.idProduct))
-            #         except:
-            #             mirror.text("> USB Device (No Additional Information)")
-            #             continue
-            #         if eval(self.cyIO.getInfo("verbose")) == True:
-            #             mirror.text(" Company: " + company)
-            #             mirror.text("  Device: " + product)
-            #             mirror.text("  Vendor: " + vid)
-            #             mirror.text(" Product: " + pid)
-
-            #         useDevice = ""
-            #         for i, findDevice in enumerate(deviceList):
-
-            #             if product == deviceList[i]:
-
-            #                 mirror.text(
-            #                     "\r\n> Found EEG Device [" + findDevice + "] \r\n")
-            #                 if "confirm" in config:
-            #                     useDevice = input(" Use this device? [Y]es? ")
-            #                 else:
-            #                     useDevice = "Y"
-            #                 if useDevice.upper() == "Y":
-            #                     devicesUsed += 1
-            #                     self.device = select_device
-
-            #                     if threadMax < 2:
-
-            #                         self.device.set_configuration()
-            #                         cfg = self.device.get_active_configuration()
-
-            #                         if product == 'EPOC+':
-            #                             deviceList[1] = 'empty'
-            #                             intf = cfg[(0, 0)]
-            #                             self.cyIO.setInfo("intf", intf)
-
-            #                         else:
-
-            #                             intf = cfg[(1, 0)]
-            #                             self.cyIO.setInfo("intf", intf)
-
-            #                         """
-            #                         detail_info = None
-            #                         intf = cfg[(0,0)]
-            #                         while 1:
-            #                             detail_info = list(self.device.ctrl_transfer(0xA1, 0x01, 0x0100, 0, 32))
-            #                             mirror.text(str(detail_info))
-            #                             data = ""
-            #                             data = self.device.read(0x02, 32, 1000)
-            #                             if data != "":
-            #                                 mirror.text(">>>" + str(list(data)))
-            #                             #time.sleep(.1)
-            #                         """
-
-            #                         while detail_info == None:
-
-            #                             if product == 'EPOC+':
-            #                                 detail_info = list(self.device.ctrl_transfer(
-            #                                     0xA1, 0x01, 0x0100, 0, 32))
-            #                             else:
-            #                                 detail_info = list(self.device.ctrl_transfer(
-            #                                     0xA1, 0x01, 0x0300, 1, 31))
-
-            #                             if detail_info == None:
-            #                                 continue
-            #                             device_firmware = "0x" + \
-            #                                 str(hex(detail_info[2]))[
-            #                                     2:] + str(hex(detail_info[3])[2:])
-            #                             software_firmware = "0x" + \
-            #                                 str(hex(detail_info[4]))[
-            #                                     2:] + str(hex(detail_info[5])[2:])
-
-            #                         if eval(self.cyIO.getInfo("verbose")) == True:
-            #                             mirror.text(str(list(detail_info)))
-            #                             mirror.text(
-            #                                 " Device Firmware = " + device_firmware)
-            #                             mirror.text(
-            #                                 " Software Firmware = " + software_firmware)
-
-            #                         self.serial_number = str(cyPyUSB.util.get_string(
-            #                             self.device, self.device.iSerialNumber))
-            #                         self.product_name = str(cyPyUSB.util.get_string(
-            #                             self.device, select_device.iProduct))
-            #                     if eval(self.cyIO.getInfo("verbose")) == True:
-            #                         mirror.text("> Using Device: " +
-            #                                     self.product_name + "\r\n")
-            #                         mirror.text(
-            #                             " ░░ Serial Number: " + self.serial_number + " ░░\r\n")
-
-            # except Exception as e:
-            #     mirror.text(
-            #         " eegThread.run() Error Communicating With USB. " + str(e))
-            #     os._exit(0)
 
         if devicesUsed == 0:
             mirror.text("\r\n> No USB Device Available. Exiting . . . \r\n")
@@ -1349,10 +1033,7 @@ class EEG(object):
         self.cyIO.setInfo("deviceFirmware",  device_firmware)
         self.cyIO.setInfo("softFirmware",    software_firmware)
 
-        if eeg_driver == "bluetooth":
-            self.cyIO.setInfo("serial",   str(BT_key))
-        else:
-            self.cyIO.setInfo("serial",   self.serial_number)
+        self.cyIO.setInfo("serial",   self.serial_number)
 
         if self.product_name == 'EPOC+':
             settings_menu(self.device, self.cyIO, intf)
@@ -1360,10 +1041,7 @@ class EEG(object):
         sn = bytearray()
 
         for i in range(0, len(self.serial_number)):
-            if eeg_driver == "bluetooth":
-                sn += bytearray([self.serial_number[i]])
-            else:
-                sn += bytearray([ord(self.serial_number[i])])
+            sn += bytearray([ord(self.serial_number[i])])
 
         if len(sn) != 16:
             return
@@ -1424,9 +1102,6 @@ class EEG(object):
         self.cyIO.setInfo("sampling", str(self.samplingRate))
         self.cyIO.setInfo("channels", str(self.channels))
         self.cyIO.setInfo("keymodel", str(model))
-
-        if eeg_driver == "bluetooth":
-            return bytes(bytearray(k))
 
         if eval(self.cyIO.getInfo("verbose")) == True:
             mirror.text("═" * 90)
@@ -1532,10 +1207,7 @@ class EEG(object):
         #  Create AES(ECB) Cipher.
         # ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
         try:
-            if eeg_driver == "bluetooth":
-                pass
-            else:
-                AES_key = bytes(bytearray(key))
+            AES_key = bytes(bytearray(key))
 
             if eval(cyIO.getInfo("verbose")) == True:
                 mirror.text(" Cipher Key = " + str(key))
@@ -1689,40 +1361,11 @@ class EEG(object):
                     counter_data = ""
                     packet_data = ""
                     filter_data = ""
+                    task = tasks.get()
+                    data = cipher.decrypt(task)
 
-                    if eeg_driver == "bluetooth":
-                        task = tasks.get()
-                        decrypted = cipher.decrypt(task[0:16])
-                        sel_decrypt = decrypted[0:1] + decrypted[1:16]
-                        if BTLE_device_name == "Insight":
-                            data = task[19:20]  \
-                                + sel_decrypt \
-                                + task[16:17] \
-                                + task[17:18] \
-                                + task[18:19]
-
-                        else:
-                            try:
-                                data = cipher.decrypt(task)
-                            except:
-                                return
-
-                        if self.outputraw == True:
-                            mirror.text(str(list(task)))
-                        if self.outputdata == True:
-                            mirror.text(str(list(data)))
-
-                    if eeg_driver == "pywinusb":
-                        task = tasks.get()
-                        data = cipher.decrypt(bytes(task, 'latin-1')[0:32])
-                        # data = cipher.decrypt(task[0:32])
-
-                    if eeg_driver == "pyusb":
-                        task = tasks.get()
-                        data = cipher.decrypt(task)
-
-                        if self.outputraw == True:
-                            mirror.text(str(list(task)))
+                    if self.outputraw == True:
+                        mirror.text(str(list(task)))
 
                     # Function Every Second.
                     if (int(time.time() % 60) - self.getSeconds) == 1:
@@ -1828,43 +1471,6 @@ class EEG(object):
                                     mirror.text(
                                         str(counter_data + packet_data))
 
-                        # Bluetooth Formatting.
-                        if self.format == 3:
-                            # Every 14 Bits of first 10 Bytes are split up into 8 bit + 6 bits.
-
-                            z = ''
-                            for i in range(1, len(data)):
-                                # if i == 16:
-                                #    continue
-                                z = z + format(data[i], '08b')
-
-                            insight_bt_index = 15
-                            for i in range(2, (len(self.insight_1)), 2):
-                                # if i == 14:
-                                #    packet_data = packet_data + str(data[14]) + self.delimiter + str(data[15]) + self.delimiter
-                                #    continue
-
-                                i_1 = self.insight_1[(i-2)]
-                                i_2 = self.insight_1[(i-1)]
-
-                                # mirror.text(str(i_1) + ":" + str(i_2) + " - " + str(i_2) + ":" + str((i_2+6)))
-
-                                if i_2 > len(z):
-                                    i = len(self.insight_1)
-
-                                # Get 2 halves of 14bytes (8byte + 6byte)
-                                v_1 = '0b' + z[(i_1):(i_2)]
-
-                                v_2 = '0b' + z[(i_2):(i_2+6)]
-                                packet_data = packet_data + \
-                                    str(int(eval(v_1))) + self.delimiter + \
-                                    str(int(eval(v_2))) + self.delimiter
-
-                            packet_data = packet_data[:-len(self.delimiter)]
-
-                            if self.outputdata == True:
-                                mirror.text(str(counter_data + packet_data))
-
                         if self.format < 1:
                             for i in range(1, 16, 2):
                                 # print(str(data[0]) + "-" + str(data[1]) + " " + str(i))
@@ -1878,16 +1484,7 @@ class EEG(object):
                                         str(data[i]), str(data[i+1]))) + self.delimiter
 
                             packet_data = packet_data[:-len(self.delimiter)]
-                            """ Insight not currently supported for openvibe.  
-                                Will need to select the channels necessary. Will update in next revision.
-                            if self.openvibe == True and self.nocounter == True:
-                                ov_data = [float(x) for x in packet_data.split(self.delimiter)][0:5]
-                                ov_data = str(ov_data)
-                                ov_data = ov_data[1:]
-                                ov_data = ov_data[:-1]
-                                packet_data = str(ov_data)
-                                print(str(ov_data))
-                            """
+
                             if cyIO.isRecording() == True:
                                 cyIO.startRecord(counter_data + packet_data)
                             if self.outputdata == True:

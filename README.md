@@ -6,7 +6,6 @@
 This is a stripped down fork of [CymatiCorp/CyKit](https://github.com/CymatiCorp/CyKit) ported to Linux.  
 
 ## Running
----
 
 Since this application needs to access your machine's USB ports, you either have to run it with root permissions or add udev rules.
 
@@ -41,7 +40,6 @@ Verify cykit rules were read properly with the command:
 `udevadm test /`
 
 ## Troubleshooting
----
 ### How to solve `KeyError: 'Sec-WebSocket-Key'`
 Run the program with the `+generic` flag as such: `python CyKIT.py 127.0.0.1 54123 4 +generic` (use sudo if not using udev rules).
 
