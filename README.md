@@ -3,9 +3,35 @@
 
 CyKIT 3.0 for Python 3.x (Linux)
 =
-Until MAC/Linux support can be integrated into this repository, <br>
-Please see this branch for MAC/Linux support. <br>
-https://github.com/tahesse/CyKITv2
+`python cykit-linux.py` (with udev rules added)
+
+`sudo python cykit-linux.py` (root permissions, without udev rules)
+
+ ## Adding udev rules
+`sudo nano /etc/udev/rules.d/99-cykit.rules `
+
+Save the following to file:
+```
+ACTION=="add", \
+SUBSYSTEM="usb", \
+ATTRS{idVendor}=="1234", \
+ATTRS{idProduct}=="ed02", \
+MODE="0666"
+```
+
+Then reload udev rules:
+
+`sudo udevadm control --reload-rules && sudo udevadm trigger`
+
+Next:
+ * Remove USB device.
+ * Insert USB device.
+ * Run python cykit-linux.py
+
+### Troubleshooting
+Verify cykit rules were read properly with the command:
+
+`udevadm test /`
 
 CyKIT 3.0 for Python 3.7.x (Windows)
 =
