@@ -28,7 +28,7 @@ def mirror(custom_string):
 
 if arg_count == 1 or arg_count > 5 or sys.argv[1] == "help" or sys.argv[1] == "--help" or sys.argv[1] == "/?":
     mirror("\r\n")
-    mirror(" (Version: CyKIT 3.0:2018.Dec.26) for Python 3.x on (Win32 or Win64) \r\n")
+    mirror(" (Version: CyKIT 3.0:2018.Dec.26) for Python 3.7/3.10 LINUX PORT WITHOUT WEB INTERFACE \r\n")
     mirror(
         "\r\n Usage:  Python.exe .\\CyKIT.py <IP> <Port> <Model#(1-6)> [config] \r\n\r\n")
     mirror(" Must be launched from the CyKIT directory, do not use py launcher.\r\n")
@@ -72,8 +72,6 @@ if arg_count == 1 or arg_count > 5 or sys.argv[1] == "help" or sys.argv[1] == "-
     mirror("  'allmode'             Sends Gyro and EEG data packets (Can change during run-time)\r\n\r\n")
     mirror("  'eegmode'             Sends only EEG packets. (Can change during run-time)\r\n\r\n")
     mirror("  'gyromode'            Sends only Gyro packet. (Can change during run-time)\r\n\r\n")
-    mirror("  'pywinusb'            Specifies to use the pywinusb libraries to connect to the USB device.\r\n\r\n")
-    mirror("                         Defaults to using libusb libraries.\r\n\r\n")
     mirror("  'noweb'               Displays data. (without requiring a TCP connection.)\r\n\r\n")
     mirror("   Join these options (in any order), using a + separator. \r\n")
     mirror("   (e.g  info+confirm ) \r\n\r\n")
@@ -199,9 +197,7 @@ def main(CyINIT):
             if eval(cy_IO.getInfo("openvibe")) == True:
                 if check_threads == 0:
                     ioTHREAD.onClose("CyKIT.main() 2")
-                    mirror("\r\n*** Reseting . . .")
-                    CyINIT = 1
-                    main(1)
+                    sys.exit('(-) Connection closed by client.')
                 continue
 
             if check_threads < (1 if noweb == True else 2):
@@ -227,9 +223,7 @@ def main(CyINIT):
                 t_array = str(
                     list(map(lambda x: x.name, threading.enumerate())))
                 ioTHREAD.onClose("CyKIT.main() 1")
-                mirror("*** Reseting . . .")
-                CyINIT = 1
-                main(1)
+                sys.exit('(-) Connection closed by client.')
 
 
 try:

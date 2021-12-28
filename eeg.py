@@ -102,7 +102,7 @@ if parameters > 4 and "path" in eeg_config:
     mirror.text("[Python Search Path] " + str(sys.path))
 
 
-#  Setup [ pyUSB (Default) / pywinusb ]
+#  Setup [ pyUSB (Default) ]
 # ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 if verbose == True:
     mirror.text("> Importing (pyusb) \\cyPyUSB")
@@ -560,13 +560,6 @@ def settings_menu(device, sIO, intf):
             mirror.text(
                 "  it is recommended you use an Emotiv program to make mode changes.")
 
-    if eeg_driver == "pywinusb":
-        successReport = device.find_input_reports()
-
-        for inputReport in successReport:
-            mirror.text(str(inputReport.get_hid_object()))
-            data = inputReport.get()
-
     if data != None:
         current_mode = resolve_mode(str(data[12:20]))
 
@@ -635,16 +628,10 @@ def settings_menu(device, sIO, intf):
             EPOC_ChangeMode = mode_select
 
             ep_mode = [0x0] * 32
-            if eeg_driver == "pywinusb":
-                ep_mode[1:4] = [0x55, 0xAA, 0x20, 0x12]
-                ep_select = [0x00, 0x82, 0x86, 0x8A,
-                             0x8E, 0xE2, 0xE6, 0xEA, 0xEE]
-                ep_mode[5] = ep_select[EPOC_ChangeMode]
-            if eeg_driver == "pyusb":
-                ep_mode[0:3] = [0x55, 0xAA, 0x20, 0x12]
-                ep_select = [0x00, 0x82, 0x86, 0x8A,
-                             0x8E, 0xE2, 0xE6, 0xEA, 0xEE]
-                ep_mode[4] = ep_select[EPOC_ChangeMode]
+            ep_mode[0:3] = [0x55, 0xAA, 0x20, 0x12]
+            ep_select = [0x00, 0x82, 0x86, 0x8A,
+                         0x8E, 0xE2, 0xE6, 0xEA, 0xEE]
+            ep_mode[4] = ep_select[EPOC_ChangeMode]
 
             # 0 EPOC                                  0x00 (d.000)  55 AA 20 12 00     IN
             # 1 EPOC+ 128hz 16bit - MEMS off          0x82 (d.130)  55 AA 20 12 82 00  IN
@@ -658,41 +645,12 @@ def settings_menu(device, sIO, intf):
 
             mirror.text("\r\n>>> Sending Mode Update to EPOC+ >>> \r\n\r\n")
             try:
-                if eeg_driver == "pywinusb":
-
-                    report = device.find_output_reports()
-                    report[0].set_raw_data(ep_mode)
-                    report[0].send()
-                    mirror.text("*** Updated EPOC+ Settings ***")
-
-                    changed_mode = -1
-                    wait_for_mode = 0
-
-                    while changed_mode != EPOC_ChangeMode:
-                        wait_for_mode += 1
-                        if wait_for_mode > 10000:
-                            mirror.text(
-                                "\r\n\r\n> Mode change incomplete. Please try again. ")
-                            mirror.text(
-                                "\r\n> Confirm the device is turned on during update. *** ")
-                            os._exit(0)
-
-                        for inputReport in successReport:
-                            data = inputReport.get()
-                            dataSTR = str(data[12:20])
-                            # using STR comparison instead of built-in SET due to py error.
-                            changed_mode = resolve_mode(dataSTR)
-
-                    mirror.text(
-                        "\r\n>>> (Confirmation) >>> EPOC+ Mode Changed to: " + str(changed_mode) + " \r\n\r\n")
-
-                if eeg_driver == "pyusb":
-                    if intf == None:
-                        mirror.text("> Invalid Descriptor ")
-                        os._exit(0)
-                    report = cyPyUSB.util.find_descriptor(intf, custom_match=lambda e: cyPyUSB.util.endpoint_direction(
-                        e.bEndpointAddress) == cyPyUSB.util.ENDPOINT_OUT)
-                    report.write(ep_mode)
+                if intf == None:
+                    mirror.text("> Invalid Descriptor ")
+                    os._exit(0)
+                report = cyPyUSB.util.find_descriptor(intf, custom_match=lambda e: cyPyUSB.util.endpoint_direction(
+                    e.bEndpointAddress) == cyPyUSB.util.ENDPOINT_OUT)
+                report.write(ep_mode)
 
             except Exception as e:
                 exc_type, ex, tb = sys.exc_info()
@@ -1108,7 +1066,7 @@ class EEG(object):
             mirror.text("   AES Key = " + str(k))
         return k
 
-    #  PyWinUSB (/cyUSB) Raw Data Handler. Thread.
+    #  Raw Data Handler. Thread.
     # ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
     def dataHandler(self, data):
 
@@ -1121,7 +1079,6 @@ class EEG(object):
             pass
         join_data = ''.join(map(chr, data[1:]))
         tasks.put(join_data)
-        # Note: PyWinUSB receives 33 bytes of data. First byte is always 0.
         return True
 
     #  (Epoc / Insight) Data Conversion.
@@ -1226,17 +1183,6 @@ class EEG(object):
                 self.running = False
                 continue
 
-                if eeg_driver == "pywinusb":
-                    t_array = str(
-                        list(map(lambda x: x.getName(), threading.enumerate())))
-                    while "Thread-" in t_array:
-                        time.sleep(0)
-                        t_array = str(
-                            list(map(lambda x: x.getName(), threading.enumerate())))
-                        cyIO.getInfo("DeviceObject").set_raw_data_handler(None)
-                        cyIO.getInfo("DeviceObject").close()
-                    continue
-
             if self.blankdata == True:
                 try:
                     if self.blank_data[self.KeyModel] == None:
@@ -1256,11 +1202,7 @@ class EEG(object):
                     self.blankdata = False
                     return
 
-                if eeg_driver == "pywinusb":
-                    self.dataHandler(encrypted_blank_cipher)
-
-                if eeg_driver == "pyusb":
-                    tasks.put(encrypted_blank_cipher[1:])
+                tasks.put(encrypted_blank_cipher[1:])
 
             if eeg_driver == "pyusb" and self.blankdata == False:
 
@@ -1689,7 +1631,7 @@ class EEG(object):
                             continue
 
                         if error_info == 9 or error_info == 10053 or error_info == 10035 or error_info == 10054:
-                            mirror.text("EEG() E.4" + str(msg))
+                            mirror.text("EEG() E.4" + str(e))
                             mirror.text("\r\n Connection Closing.\r\n")
 
                             tasks.queue.clear()
@@ -1697,13 +1639,11 @@ class EEG(object):
                                 cyIO.onClose("0")
                             else:
                                 cyIO.onClose("1")
-                                if eeg_driver == "pywinusb":
-                                    self.device.close()
                                 cyIO.stopRecord()
                             continue
                         mirror.text(
                             " ¯¯¯¯ eegThread.run() Error creating OpenVibe Data and or Filtering Data.")
-                        mirror.text(" =E.10: " + str(msg))
+                        mirror.text(" =E.10: " + str(e))
 
                 except Exception as e:
                     exc_type, ex, tb = sys.exc_info()

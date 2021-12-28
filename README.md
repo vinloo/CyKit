@@ -3,7 +3,7 @@
 
 > Only tested on Ubuntu 20.04 LTS with the Emotiv Insight
 
-This is a stripped down fork of [CymatiCorp/CyKit](https://github.com/CymatiCorp/CyKit) ported to Linux.  
+This is a stripped down fork of [CymatiCorp/CyKit](https://github.com/CymatiCorp/CyKit) ported to Linux with the web interface removed due to compatibility issues.  
 
 ## Running
 

@@ -83,7 +83,7 @@ class socketIO():
 
         try:
             (self.con, address) = sock.accept()
-            mirror.text("(+) Connected.\r\n")
+            mirror.text("(+) Connected.")
 
         except socket.error as e:
             mirror.text("(-) Not Connected. ")
