@@ -1621,7 +1621,9 @@ class EEG(object):
                                     packet_data = packet_data[:(
                                         len(packet_data)-1)]
 
-                            self.cyIO.sendData(1, counter_data + packet_data)
+                            if packet_data.count('-0.00000896') < 5:
+                                self.cyIO.sendData(
+                                    1, counter_data + packet_data)
 
                     except OSError as e:
                         error_info = str(e.errno)
